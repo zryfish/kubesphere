@@ -94,7 +94,7 @@ func Run(s *options.ServerRunOptions, stopChan <-chan struct{}) error {
 
 	waitForResourceSync(stopChan)
 
-	err := iam.Init(s.AdminEmail, s.AdminPassword, s.AuthRateLimit, s.TokenIdleTimeout, s.EnableMultiLogin, s.GenerateKubeConfig)
+	err := iam.Init(s.AdminEmail, s.AdminPassword, s.AuthRateLimit, s.TokenIdleTimeout, s.EnableMultiLogin, s.GenerateKubeConfig, stopChan)
 
 	jwtutil.Setup(s.JWTSecret)
 

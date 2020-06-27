@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"github.com/emicklei/go-restful"
 	"io/ioutil"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog"
 	"kubesphere.io/kubesphere/pkg/constants"
 	"kubesphere.io/kubesphere/pkg/db"
@@ -39,6 +40,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -73,7 +75,80 @@ const (
 	defaultAuthTimeInterval = 30 * time.Minute
 )
 
-func Init(email, password, authRateLimit string, idleTimeout time.Duration, multiLogin bool, isGeneratingKubeConfig bool) error {
+type ldapCache struct {
+	mu    sync.RWMutex
+	users []models.User
+}
+
+var cachedUsers = new(ldapCache)
+
+// syncLdapUser syncs users from ldap
+func syncLdapUser() error {
+	newUsers := new(ldapCache)
+
+	client, err := clientset.ClientSets().Ldap()
+	if err != nil {
+		return err
+	}
+	conn, err := client.NewConn()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	pageControl := ldap.NewControlPaging(1000)
+
+	newUsers.users = make([]models.User, 0)
+
+	filter := "(&(objectClass=inetOrgPerson))"
+
+	for {
+		userSearchRequest := ldap.NewSearchRequest(
+			client.UserSearchBase(),
+			ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
+			filter,
+			[]string{"uid", "mail", "description", "preferredLanguage", "createTimestamp"},
+			[]ldap.Control{pageControl},
+		)
+
+		response, err := conn.Search(userSearchRequest)
+
+		if err != nil {
+			klog.Errorln("search user ", err)
+			return err
+		}
+
+		for _, entry := range response.Entries {
+
+			uid := entry.GetAttributeValue("uid")
+			email := entry.GetAttributeValue("mail")
+			description := entry.GetAttributeValue("description")
+			lang := entry.GetAttributeValue("preferredLanguage")
+			createTimestamp, _ := time.Parse("20060102150405Z", entry.GetAttributeValue("createTimestamp"))
+
+			user := models.User{Username: uid, Email: email, Description: description, Lang: lang, CreateTime: createTimestamp}
+
+			if !shouldHidden(user) {
+				newUsers.users = append(newUsers.users, user)
+			}
+		}
+
+		updatedControl := ldap.FindControl(response.Controls, ldap.ControlTypePaging)
+		if ctrl, ok := updatedControl.(*ldap.ControlPaging); ctrl != nil && ok && len(ctrl.Cookie) != 0 {
+			pageControl.SetCookie(ctrl.Cookie)
+			continue
+		}
+		break
+	}
+
+	cachedUsers.mu.Lock()
+	cachedUsers.users = newUsers.users
+	cachedUsers.mu.Unlock()
+
+	return nil
+}
+
+func Init(email, password, authRateLimit string, idleTimeout time.Duration, multiLogin bool, isGeneratingKubeConfig bool, stopCh <-chan struct{}) error {
 	adminEmail = email
 	adminPassword = password
 	tokenIdleTimeout = idleTimeout
@@ -94,6 +169,20 @@ func Init(email, password, authRateLimit string, idleTimeout time.Duration, mult
 		klog.Errorln("create default groups", err)
 		return err
 	}
+
+	err = syncLdapUser()
+	if err != nil {
+		klog.Errorln("error happened sync ldap users", err)
+	}
+
+	go func() {
+		wait.Until(func() {
+			err = syncLdapUser()
+			if err != nil {
+				klog.Errorf("sync ldap users failed, error: %v", err)
+			}
+		}, 5*time.Minute, stopCh)
+	}()
 
 	return nil
 }
@@ -534,81 +623,47 @@ func LoginLog(username string) ([]string, error) {
 }
 
 func ListUsers(conditions *params.Conditions, orderBy string, reverse bool, limit, offset int) (*models.PageableResponse, error) {
-
-	client, err := clientset.ClientSets().Ldap()
-	if err != nil {
-		return nil, err
-	}
-	conn, err := client.NewConn()
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-
-	pageControl := ldap.NewControlPaging(1000)
-
 	users := make([]models.User, 0)
 
-	filter := "(&(objectClass=inetOrgPerson))"
+	cachedUsers.mu.RLock()
+	defer cachedUsers.mu.RUnlock()
 
-	if keyword := conditions.Match["keyword"]; keyword != "" {
-		filter = fmt.Sprintf("(&(objectClass=inetOrgPerson)(|(uid=*%s*)(mail=*%s*)(description=*%s*)))", keyword, keyword, keyword)
-	}
-
-	if username := conditions.Match["username"]; username != "" {
-		uidFilter := ""
-		for _, username := range strings.Split(username, "|") {
-			uidFilter += fmt.Sprintf("(uid=%s)", username)
-		}
-		filter = fmt.Sprintf("(&(objectClass=inetOrgPerson)(|%s))", uidFilter)
-	}
-
-	if email := conditions.Match["email"]; email != "" {
-		emailFilter := ""
-		for _, username := range strings.Split(email, "|") {
-			emailFilter += fmt.Sprintf("(mail=%s)", username)
-		}
-		filter = fmt.Sprintf("(&(objectClass=inetOrgPerson)(|%s))", emailFilter)
-	}
-
-	for {
-		userSearchRequest := ldap.NewSearchRequest(
-			client.UserSearchBase(),
-			ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
-			filter,
-			[]string{"uid", "mail", "description", "preferredLanguage", "createTimestamp"},
-			[]ldap.Control{pageControl},
-		)
-
-		response, err := conn.Search(userSearchRequest)
-
-		if err != nil {
-			klog.Errorln("search user", err)
-			return nil, err
-		}
-
-		for _, entry := range response.Entries {
-
-			uid := entry.GetAttributeValue("uid")
-			email := entry.GetAttributeValue("mail")
-			description := entry.GetAttributeValue("description")
-			lang := entry.GetAttributeValue("preferredLanguage")
-			createTimestamp, _ := time.Parse("20060102150405Z", entry.GetAttributeValue("createTimestamp"))
-
-			user := models.User{Username: uid, Email: email, Description: description, Lang: lang, CreateTime: createTimestamp}
-
-			if !shouldHidden(user) {
-				users = append(users, user)
+	for _, user := range cachedUsers.users {
+		// no match found for keyword
+		if keyword := conditions.Match["keyword"]; keyword != "" {
+			if !(strings.Contains(user.Email, keyword) || strings.Contains(user.Description, keyword) || strings.Contains(user.Username, keyword)) {
+				continue
 			}
 		}
 
-		updatedControl := ldap.FindControl(response.Controls, ldap.ControlTypePaging)
-		if ctrl, ok := updatedControl.(*ldap.ControlPaging); ctrl != nil && ok && len(ctrl.Cookie) != 0 {
-			pageControl.SetCookie(ctrl.Cookie)
-			continue
+		// no match found for username search
+		if username := conditions.Match["username"]; username != "" {
+			kept := false
+			for _, un := range strings.Split(username, "|") {
+				if strings.Contains(user.Username, un) {
+					kept = true
+				}
+			}
+
+			if !kept {
+				continue
+			}
 		}
 
-		break
+		if email := conditions.Match["email"]; email != "" {
+			kept := false
+			for _, em := range strings.Split(email, "|") {
+				if strings.Contains(user.Email, em) {
+					kept = true
+				}
+			}
+
+			if !kept {
+				continue
+			}
+		}
+
+		users = append(users, user)
 	}
 
 	sort.Slice(users, func(i, j int) bool {
