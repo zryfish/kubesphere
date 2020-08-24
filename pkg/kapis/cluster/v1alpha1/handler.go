@@ -209,7 +209,7 @@ func (h *handler) generateDefaultDeployment(cluster *v1alpha1.Cluster, w io.Writ
 								"/agent",
 								fmt.Sprintf("--name=%s", cluster.Name),
 								fmt.Sprintf("--token=%s", cluster.Spec.Connection.Token),
-								fmt.Sprintf("--proxy-server=%s", h.proxyAddress),
+								fmt.Sprintf("--proxy-server=%s:8080", h.proxyAddress),
 								fmt.Sprintf("--keepalive=10s"),
 								fmt.Sprintf("--kubesphere-service=ks-apiserver.kubesphere-system.svc:80"),
 								fmt.Sprintf("--kubernetes-service=kubernetes.default.svc:443"),
