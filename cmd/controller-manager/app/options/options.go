@@ -19,6 +19,7 @@ package options
 import (
 	"flag"
 	"github.com/spf13/pflag"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/tools/leaderelection"
 	cliflag "k8s.io/component-base/cli/flag"
 	"k8s.io/klog"
@@ -48,6 +49,15 @@ type KubeSphereControllerManagerOptions struct {
 	LeaderElect           bool
 	LeaderElection        *leaderelection.LeaderElectionConfig
 	WebhookCertDir        string
+
+	// KubeSphere is using sigs.k8s.io/application as fundamental object to implement Application Management.
+	// There are other projects also built on sigs.k8s.io/application, when KubeSphere installed along side
+	// them, conflicts happen. So we leave an option to only reconcile applications  matched with the given
+	// selector. Default will reconcile all applications.
+	//    For example
+	//      "kubesphere.io/creator=" means reconcile applications with this label key
+	//      "!kubesphere.io/creator" means exclude applications with this key
+	ApplicationSelector string
 }
 
 func NewKubeSphereControllerManagerOptions() *KubeSphereControllerManagerOptions {
@@ -66,8 +76,9 @@ func NewKubeSphereControllerManagerOptions() *KubeSphereControllerManagerOptions
 			RenewDeadline: 15 * time.Second,
 			RetryPeriod:   5 * time.Second,
 		},
-		LeaderElect:    false,
-		WebhookCertDir: "",
+		LeaderElect:         false,
+		WebhookCertDir:      "",
+		ApplicationSelector: "",
 	}
 
 	return s
@@ -98,6 +109,11 @@ func (s *KubeSphereControllerManagerOptions) Flags() cliflag.NamedFlagSets {
 		"if not set, webhook server would look up the server key and certificate in"+
 		"{TempDir}/k8s-webhook-server/serving-certs")
 
+	gfs := fss.FlagSet("generic")
+	gfs.StringVar(&s.ApplicationSelector, "application-selector", s.ApplicationSelector, ""+
+		"Only reconcile application(sigs.k8s.io/application) objects match given selector, this could avoid conflicts with "+
+		"other projects built on top of sig-application. Default behavior is to reconcile all of application objects.")
+
 	kfs := fss.FlagSet("klog")
 	local := flag.NewFlagSet("klog", flag.ExitOnError)
 	klog.InitFlags(local)
@@ -117,6 +133,14 @@ func (s *KubeSphereControllerManagerOptions) Validate() []error {
 	errs = append(errs, s.OpenPitrixOptions.Validate()...)
 	errs = append(errs, s.NetworkOptions.Validate()...)
 	errs = append(errs, s.LdapOptions.Validate()...)
+
+	if len(s.ApplicationSelector) != 0 {
+		_, err := labels.Parse(s.ApplicationSelector)
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
 	return errs
 }
 

@@ -97,7 +97,7 @@ func New(informers informers.InformerFactory, k8sclient kubernetes.Interface, ks
 	return &tenantOperator{
 		am:             amOperator,
 		authorizer:     authorizer,
-		resourceGetter: resourcesv1alpha3.NewResourceGetter(informers),
+		resourceGetter: resourcesv1alpha3.NewResourceGetter(informers, nil),
 		k8sclient:      k8sclient,
 		ksclient:       ksclient,
 		events:         events.NewEventsOperator(evtsClient),

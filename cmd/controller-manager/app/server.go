@@ -19,13 +19,14 @@ package app
 import (
 	"fmt"
 	"github.com/spf13/cobra"
+	"k8s.io/apimachinery/pkg/labels"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	cliflag "k8s.io/component-base/cli/flag"
 	"k8s.io/klog"
-	"k8s.io/klog/klogr"
 	"kubesphere.io/kubesphere/cmd/controller-manager/app/options"
 	"kubesphere.io/kubesphere/pkg/apis"
 	controllerconfig "kubesphere.io/kubesphere/pkg/apiserver/config"
+	"kubesphere.io/kubesphere/pkg/controller/application"
 	"kubesphere.io/kubesphere/pkg/controller/namespace"
 	"kubesphere.io/kubesphere/pkg/controller/network/nsnetworkpolicy"
 	"kubesphere.io/kubesphere/pkg/controller/user"
@@ -39,7 +40,6 @@ import (
 	"kubesphere.io/kubesphere/pkg/simple/client/s3"
 	"kubesphere.io/kubesphere/pkg/utils/term"
 	"os"
-	application "sigs.k8s.io/application/controllers"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -150,7 +150,6 @@ func run(s *options.KubeSphereControllerManagerOptions, stopCh <-chan struct{}) 
 		kubernetesClient.Kubernetes(),
 		kubernetesClient.KubeSphere(),
 		kubernetesClient.Istio(),
-		kubernetesClient.Application(),
 		kubernetesClient.Snapshot(),
 		kubernetesClient.ApiExtensions())
 
@@ -194,14 +193,15 @@ func run(s *options.KubeSphereControllerManagerOptions, stopCh <-chan struct{}) 
 		klog.Fatal("Unable to create namespace controller")
 	}
 
-	err = (&application.ApplicationReconciler{
-		Scheme: mgr.GetScheme(),
-		Client: mgr.GetClient(),
-		Mapper: mgr.GetRESTMapper(),
-		Log:    klogr.New(),
-	}).SetupWithManager(mgr)
-	if err != nil {
-		klog.Fatal("Unable to create application controller")
+	selector, _ := labels.Parse(s.ApplicationSelector)
+	applicationReconciler := &application.ApplicationReconciler{
+		Scheme:              mgr.GetScheme(),
+		Client:              mgr.GetClient(),
+		Mapper:              mgr.GetRESTMapper(),
+		ApplicationSelector: selector,
+	}
+	if err = applicationReconciler.SetupWithManager(mgr); err != nil {
+		klog.Fatalf("Unable to create application controller: %v", err)
 	}
 
 	// TODO(jeff): refactor config with CRD

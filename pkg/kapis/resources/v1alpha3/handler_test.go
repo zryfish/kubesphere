@@ -30,7 +30,6 @@ import (
 	fakeks "kubesphere.io/kubesphere/pkg/client/clientset/versioned/fake"
 	"kubesphere.io/kubesphere/pkg/informers"
 	"kubesphere.io/kubesphere/pkg/models/resources/v1alpha3/resource"
-	fakeapp "sigs.k8s.io/application/pkg/client/clientset/versioned/fake"
 	"testing"
 )
 
@@ -88,7 +87,7 @@ func TestResourceV1alpha2Fallback(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	handler := New(factory)
+	handler := New(factory, nil)
 
 	for _, test := range tests {
 		got, err := listResources(test.namespace, test.resource, test.query, handler)
@@ -181,11 +180,10 @@ func prepare() (informers.InformerFactory, error) {
 	ksClient := fakeks.NewSimpleClientset()
 	k8sClient := fakek8s.NewSimpleClientset()
 	istioClient := fakeistio.NewSimpleClientset()
-	appClient := fakeapp.NewSimpleClientset()
 	snapshotClient := fakesnapshot.NewSimpleClientset()
 	apiextensionsClient := fakeapiextensions.NewSimpleClientset()
 
-	fakeInformerFactory := informers.NewInformerFactories(k8sClient, ksClient, istioClient, appClient, snapshotClient, apiextensionsClient)
+	fakeInformerFactory := informers.NewInformerFactories(k8sClient, ksClient, istioClient, snapshotClient, apiextensionsClient)
 
 	k8sInformerFactory := fakeInformerFactory.KubernetesSharedInformerFactory()
 

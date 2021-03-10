@@ -27,6 +27,7 @@ import (
 	resourcev1alpha2 "kubesphere.io/kubesphere/pkg/models/resources/v1alpha2/resource"
 	"kubesphere.io/kubesphere/pkg/models/resources/v1alpha3/resource"
 	"kubesphere.io/kubesphere/pkg/server/params"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"strings"
 )
 
@@ -36,9 +37,9 @@ type Handler struct {
 	componentsGetter        components.ComponentsGetter
 }
 
-func New(factory informers.InformerFactory) *Handler {
+func New(factory informers.InformerFactory, cache cache.Cache) *Handler {
 	return &Handler{
-		resourceGetterV1alpha3:  resource.NewResourceGetter(factory),
+		resourceGetterV1alpha3:  resource.NewResourceGetter(factory, cache),
 		resourcesGetterV1alpha2: resourcev1alpha2.NewResourceGetter(factory),
 		componentsGetter:        components.NewComponentsGetter(factory.KubernetesSharedInformerFactory()),
 	}

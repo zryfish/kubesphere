@@ -34,7 +34,6 @@ import (
 	fakeks "kubesphere.io/kubesphere/pkg/client/clientset/versioned/fake"
 	"kubesphere.io/kubesphere/pkg/informers"
 	"reflect"
-	fakeapp "sigs.k8s.io/application/pkg/client/clientset/versioned/fake"
 	"testing"
 )
 
@@ -490,8 +489,7 @@ func prepare() Interface {
 	ksClient := fakeks.NewSimpleClientset([]runtime.Object{testWorkspace, systemWorkspace}...)
 	k8sClient := fakek8s.NewSimpleClientset([]runtime.Object{testNamespace, kubesphereSystem}...)
 	istioClient := fakeistio.NewSimpleClientset()
-	appClient := fakeapp.NewSimpleClientset()
-	fakeInformerFactory := informers.NewInformerFactories(k8sClient, ksClient, istioClient, appClient, nil, nil)
+	fakeInformerFactory := informers.NewInformerFactories(k8sClient, ksClient, istioClient, nil, nil)
 
 	for _, workspace := range workspaces {
 		fakeInformerFactory.KubeSphereSharedInformerFactory().Tenant().V1alpha1().

@@ -85,13 +85,13 @@ type amOperator struct {
 
 func NewReadOnlyOperator(factory informers.InformerFactory) AccessManagementInterface {
 	return &amOperator{
-		resourceGetter: resourcev1alpha3.NewResourceGetter(factory),
+		resourceGetter: resourcev1alpha3.NewResourceGetter(factory, nil),
 	}
 }
 
 func NewOperator(factory informers.InformerFactory, ksclient kubesphere.Interface, k8sclient kubernetes.Interface) AccessManagementInterface {
 	return &amOperator{
-		resourceGetter: resourcev1alpha3.NewResourceGetter(factory),
+		resourceGetter: resourcev1alpha3.NewResourceGetter(factory, nil),
 		ksclient:       ksclient,
 		k8sclient:      k8sclient,
 	}

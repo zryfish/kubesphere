@@ -42,7 +42,7 @@ type IdentityManagementInterface interface {
 func NewOperator(ksClient kubesphere.Interface, factory informers.InformerFactory, options *authoptions.AuthenticationOptions) IdentityManagementInterface {
 	im := &defaultIMOperator{
 		ksClient:       ksClient,
-		resourceGetter: resourcev1alpha3.NewResourceGetter(factory),
+		resourceGetter: resourcev1alpha3.NewResourceGetter(factory, nil),
 		options:        options,
 	}
 	return im

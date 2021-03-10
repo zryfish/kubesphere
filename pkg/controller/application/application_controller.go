@@ -17,257 +17,288 @@ limitations under the License.
 package application
 
 import (
+	"context"
 	"fmt"
-	"time"
-
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	v1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	v1beta12 "k8s.io/api/networking/v1beta1"
+	"k8s.io/apimachinery/pkg/api/equality"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
-	informersv1 "k8s.io/client-go/informers/apps/v1"
-	coreinformers "k8s.io/client-go/informers/core/v1"
-	clientset "k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
-	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
-	listersv1 "k8s.io/client-go/listers/apps/v1"
-	corelisters "k8s.io/client-go/listers/core/v1"
-	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/tools/record"
-	"k8s.io/client-go/util/workqueue"
-	log "k8s.io/klog"
-	servicemeshinformers "kubesphere.io/kubesphere/pkg/client/informers/externalversions/servicemesh/v1alpha2"
-	servicemeshlisters "kubesphere.io/kubesphere/pkg/client/listers/servicemesh/v1alpha2"
-	"kubesphere.io/kubesphere/pkg/controller/virtualservice/util"
-	applicationclient "sigs.k8s.io/application/pkg/client/clientset/versioned"
-	applicationinformers "sigs.k8s.io/application/pkg/client/informers/externalversions/app/v1beta1"
-	applicationlister "sigs.k8s.io/application/pkg/client/listers/app/v1beta1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/client-go/util/retry"
+	"k8s.io/klog"
+	servicemeshv1alpha2 "kubesphere.io/kubesphere/pkg/apis/servicemesh/v1alpha2"
+	"kubesphere.io/kubesphere/pkg/controller/utils/servicemesh"
+	appv1beta1 "sigs.k8s.io/application/api/v1beta1"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-const (
-	// maxRetries is the number of times a service will be retried before it is dropped out of the queue.
-	// With the current rate-limiter in use (5ms*2^(maxRetries-1)) the following numbers represent the
-	// sequence of delays between successive queuings of a service.
-	//
-	// 5ms, 10ms, 20ms, 40ms, 80ms, 160ms, 320ms, 640ms, 1.3s, 2.6s, 5.1s, 10.2s, 20.4s, 41s, 82s
-	maxRetries = 15
-)
-
-type ApplicationController struct {
-	client clientset.Interface
-
-	applicationClient applicationclient.Interface
-
-	eventBroadcaster record.EventBroadcaster
-	eventRecorder    record.EventRecorder
-
-	applicationLister applicationlister.ApplicationLister
-	applicationSynced cache.InformerSynced
-
-	serviceLister corelisters.ServiceLister
-	serviceSynced cache.InformerSynced
-
-	deploymentLister listersv1.DeploymentLister
-	deploymentSynced cache.InformerSynced
-
-	statefulSetLister listersv1.StatefulSetLister
-	statefulSetSynced cache.InformerSynced
-
-	strategyLister servicemeshlisters.StrategyLister
-	strategySynced cache.InformerSynced
-
-	servicePolicyLister servicemeshlisters.ServicePolicyLister
-	servicePolicySynced cache.InformerSynced
-
-	queue workqueue.RateLimitingInterface
-
-	workerLoopPeriod time.Duration
+// ApplicationReconciler reconciles a Application object
+type ApplicationReconciler struct {
+	client.Client
+	Mapper              meta.RESTMapper
+	Scheme              *runtime.Scheme
+	ApplicationSelector labels.Selector //
 }
 
-func NewApplicationController(serviceInformer coreinformers.ServiceInformer,
-	deploymentInformer informersv1.DeploymentInformer,
-	statefulSetInformer informersv1.StatefulSetInformer,
-	strategyInformer servicemeshinformers.StrategyInformer,
-	servicePolicyInformer servicemeshinformers.ServicePolicyInformer,
-	applicationInformer applicationinformers.ApplicationInformer,
-	client clientset.Interface,
-	applicationClient applicationclient.Interface) *ApplicationController {
-
-	broadcaster := record.NewBroadcaster()
-	broadcaster.StartLogging(func(format string, args ...interface{}) {
-		log.Info(fmt.Sprintf(format, args))
-	})
-	broadcaster.StartRecordingToSink(&corev1.EventSinkImpl{Interface: client.CoreV1().Events("")})
-	recorder := broadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "application-controller"})
-
-	v := &ApplicationController{
-		client:            client,
-		applicationClient: applicationClient,
-		queue:             workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "application"),
-		workerLoopPeriod:  time.Second,
+func (r *ApplicationReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+	var app appv1beta1.Application
+	err := r.Get(context.Background(), req.NamespacedName, &app)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
 	}
 
-	v.deploymentLister = deploymentInformer.Lister()
-	v.deploymentSynced = deploymentInformer.Informer().HasSynced
+	// If label selector were given, only reconcile matched applications
+	// match annotations and labels
+	if !r.ApplicationSelector.Empty() {
+		if !r.ApplicationSelector.Matches(labels.Set(app.Labels)) &&
+			!r.ApplicationSelector.Matches(labels.Set(app.Annotations)) {
+			return ctrl.Result{}, err
+		}
+	}
 
-	deploymentInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    v.enqueueObject,
-		DeleteFunc: v.enqueueObject,
-	})
+	// Application is in the process of being deleted, so no need to do anything.
+	if app.DeletionTimestamp != nil {
+		return ctrl.Result{}, nil
+	}
 
-	v.statefulSetLister = statefulSetInformer.Lister()
-	v.statefulSetSynced = statefulSetInformer.Informer().HasSynced
+	resources, errs := r.updateComponents(context.Background(), &app)
+	newApplicationStatus := r.getNewApplicationStatus(context.Background(), &app, resources, &errs)
 
-	statefulSetInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    v.enqueueObject,
-		DeleteFunc: v.enqueueObject,
-	})
+	newApplicationStatus.ObservedGeneration = app.Generation
+	if equality.Semantic.DeepEqual(newApplicationStatus, &app.Status) {
+		return ctrl.Result{}, nil
+	}
 
-	v.serviceLister = serviceInformer.Lister()
-	v.serviceSynced = serviceInformer.Informer().HasSynced
-
-	serviceInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    v.enqueueObject,
-		DeleteFunc: v.enqueueObject,
-	})
-
-	v.strategyLister = strategyInformer.Lister()
-	v.strategySynced = strategyInformer.Informer().HasSynced
-
-	strategyInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    v.enqueueObject,
-		DeleteFunc: v.enqueueObject,
-	})
-
-	v.servicePolicyLister = servicePolicyInformer.Lister()
-	v.servicePolicySynced = servicePolicyInformer.Informer().HasSynced
-
-	servicePolicyInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    v.enqueueObject,
-		DeleteFunc: v.enqueueObject,
-	})
-
-	v.applicationLister = applicationInformer.Lister()
-	v.applicationSynced = applicationInformer.Informer().HasSynced
-
-	v.eventBroadcaster = broadcaster
-	v.eventRecorder = recorder
-
-	return v
-
+	err = r.updateApplicationStatus(context.Background(), req.NamespacedName, newApplicationStatus)
+	return ctrl.Result{}, err
 }
 
-func (v *ApplicationController) Start(stopCh <-chan struct{}) error {
-	return v.Run(2, stopCh)
+func (r *ApplicationReconciler) updateComponents(ctx context.Context, app *appv1beta1.Application) ([]*unstructured.Unstructured, []error) {
+	var errs []error
+	resources := r.fetchComponentListResources(ctx, app.Spec.ComponentGroupKinds, app.Spec.Selector, app.Namespace, &errs)
+
+	if app.Spec.AddOwnerRef {
+		ownerRef := metav1.NewControllerRef(app, appv1beta1.GroupVersion.WithKind("Application"))
+		*ownerRef.Controller = false
+		if err := r.setOwnerRefForResources(ctx, *ownerRef, resources); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return resources, errs
 }
 
-func (v *ApplicationController) Run(workers int, stopCh <-chan struct{}) error {
-	defer utilruntime.HandleCrash()
-	defer v.queue.ShutDown()
+func (r *ApplicationReconciler) getNewApplicationStatus(ctx context.Context, app *appv1beta1.Application, resources []*unstructured.Unstructured, errList *[]error) *appv1beta1.ApplicationStatus {
+	objectStatuses := r.objectStatuses(ctx, resources, errList)
+	errs := utilerrors.NewAggregate(*errList)
 
-	log.Info("starting application controller")
-	defer log.Info("shutting down application controller")
+	aggReady, countReady := aggregateReady(objectStatuses)
 
-	if !cache.WaitForCacheSync(stopCh, v.deploymentSynced, v.statefulSetSynced, v.serviceSynced, v.strategySynced, v.servicePolicySynced, v.applicationSynced) {
-		return fmt.Errorf("failed to wait for caches to sync")
+	newApplicationStatus := app.Status.DeepCopy()
+	newApplicationStatus.ComponentList = appv1beta1.ComponentList{
+		Objects: objectStatuses,
+	}
+	newApplicationStatus.ComponentsReady = fmt.Sprintf("%d/%d", countReady, len(objectStatuses))
+	if errs != nil {
+		setReadyUnknownCondition(newApplicationStatus, "ComponentsReadyUnknown", "failed to aggregate all components' statuses, check the Error condition for details")
+	} else if aggReady {
+		setReadyCondition(newApplicationStatus, "ComponentsReady", "all components ready")
+	} else {
+		setNotReadyCondition(newApplicationStatus, "ComponentsNotReady", fmt.Sprintf("%d components not ready", len(objectStatuses)-countReady))
 	}
 
-	for i := 0; i < workers; i++ {
-		go wait.Until(v.worker, v.workerLoopPeriod, stopCh)
+	if errs != nil {
+		setErrorCondition(newApplicationStatus, "ErrorSeen", errs.Error())
+	} else {
+		clearErrorCondition(newApplicationStatus)
 	}
-	<-stopCh
+
+	return newApplicationStatus
+}
+
+func (r *ApplicationReconciler) fetchComponentListResources(ctx context.Context, groupKinds []metav1.GroupKind, selector *metav1.LabelSelector, namespace string, errs *[]error) []*unstructured.Unstructured {
+	var resources []*unstructured.Unstructured
+
+	if selector == nil {
+		klog.V(2).Info("No selector is specified")
+		return resources
+	}
+
+	for _, gk := range groupKinds {
+		mapping, err := r.Mapper.RESTMapping(schema.GroupKind{
+			Group: appv1beta1.StripVersion(gk.Group),
+			Kind:  gk.Kind,
+		})
+		if err != nil {
+			klog.V(2).Info("NoMappingForGK", "gk", gk.String())
+			continue
+		}
+
+		list := &unstructured.UnstructuredList{}
+		list.SetGroupVersionKind(mapping.GroupVersionKind)
+		if err = r.Client.List(ctx, list, client.InNamespace(namespace), client.MatchingLabels(selector.MatchLabels)); err != nil {
+			klog.Error(err, "unable to list resources for GVK", "gvk", mapping.GroupVersionKind)
+			*errs = append(*errs, err)
+			continue
+		}
+
+		for _, u := range list.Items {
+			resource := u
+			resources = append(resources, &resource)
+		}
+	}
+	return resources
+}
+
+func (r *ApplicationReconciler) setOwnerRefForResources(ctx context.Context, ownerRef metav1.OwnerReference, resources []*unstructured.Unstructured) error {
+	for _, resource := range resources {
+		ownerRefs := resource.GetOwnerReferences()
+		ownerRefFound := false
+		for i, refs := range ownerRefs {
+			if ownerRef.Kind == refs.Kind &&
+				ownerRef.APIVersion == refs.APIVersion &&
+				ownerRef.Name == refs.Name {
+				ownerRefFound = true
+				if ownerRef.UID != refs.UID {
+					ownerRefs[i] = ownerRef
+				}
+			}
+		}
+
+		if !ownerRefFound {
+			ownerRefs = append(ownerRefs, ownerRef)
+		}
+		resource.SetOwnerReferences(ownerRefs)
+		err := r.Client.Update(ctx, resource)
+		if err != nil {
+			// We log this error, but we continue and try to set the ownerRefs on the other resources.
+			klog.Error(err, "ErrorSettingOwnerRef", "gvk", resource.GroupVersionKind().String(),
+				"namespace", resource.GetNamespace(), "name", resource.GetName())
+		}
+	}
 	return nil
 }
 
-func (v *ApplicationController) worker() {
-
-	for v.processNextWorkItem() {
+func (r *ApplicationReconciler) objectStatuses(ctx context.Context, resources []*unstructured.Unstructured, errs *[]error) []appv1beta1.ObjectStatus {
+	var objectStatuses []appv1beta1.ObjectStatus
+	for _, resource := range resources {
+		os := appv1beta1.ObjectStatus{
+			Group: resource.GroupVersionKind().Group,
+			Kind:  resource.GetKind(),
+			Name:  resource.GetName(),
+			Link:  resource.GetSelfLink(),
+		}
+		s, err := status(resource)
+		if err != nil {
+			klog.Error(err, "unable to compute status for resource", "gvk", resource.GroupVersionKind().String(),
+				"namespace", resource.GetNamespace(), "name", resource.GetName())
+			*errs = append(*errs, err)
+		}
+		os.Status = s
+		objectStatuses = append(objectStatuses, os)
 	}
+	return objectStatuses
 }
 
-func (v *ApplicationController) processNextWorkItem() bool {
-	eKey, quit := v.queue.Get()
-	if quit {
-		return false
+func aggregateReady(objectStatuses []appv1beta1.ObjectStatus) (bool, int) {
+	countReady := 0
+	for _, os := range objectStatuses {
+		if os.Status == StatusReady {
+			countReady++
+		}
 	}
-
-	defer v.queue.Done(eKey)
-
-	err := v.syncApplication(eKey.(string))
-	v.handleErr(err, eKey)
-
-	return true
+	if countReady == len(objectStatuses) {
+		return true, countReady
+	}
+	return false, countReady
 }
 
-func (v *ApplicationController) syncApplication(key string) error {
-	startTime := time.Now()
-	namespace, name, err := cache.SplitMetaNamespaceKey(key)
-	if err != nil {
-		log.Error(err, "not a valid controller key", "key", key)
-		return err
-	}
-
-	defer func() {
-		log.V(4).Info("Finished updating application.", "namespace", namespace, "name", name, "duration", time.Since(startTime))
-	}()
-
-	application, err := v.applicationLister.Applications(namespace).Get(name)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// application has been deleted
-			return nil
+func (r *ApplicationReconciler) updateApplicationStatus(ctx context.Context, nn types.NamespacedName, status *appv1beta1.ApplicationStatus) error {
+	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		original := &appv1beta1.Application{}
+		if err := r.Get(ctx, nn, original); err != nil {
+			return err
 		}
-		log.Error(err, "get application failed")
-	}
-
-	annotations := application.GetAnnotations()
-	if annotations == nil {
-		annotations = make(map[string]string)
-	}
-	annotations["kubesphere.io/last-updated"] = time.Now().String()
-	application.SetAnnotations(annotations)
-
-	_, err = v.applicationClient.AppV1beta1().Applications(namespace).Update(application)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			log.V(4).Info("application has been deleted during update")
-			return nil
+		original.Status = *status
+		if err := r.Client.Status().Update(ctx, original); err != nil {
+			return err
 		}
-		log.Error(err, "failed to update application", "namespace", namespace, "name", name)
-		return err
+		return nil
+	}); err != nil {
+		return fmt.Errorf("failed to update status of Application %s/%s: %v", nn.Namespace, nn.Name, err)
 	}
-
 	return nil
 }
 
-func (v *ApplicationController) enqueueObject(obj interface{}) {
-	var resource = obj.(metav1.Object)
+func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	c, err := ctrl.NewControllerManagedBy(mgr).
+		Named("application-controller").
+		For(&appv1beta1.Application{}).Build(r)
 
-	if resource.GetLabels() == nil || !util.IsApplicationComponent(resource.GetLabels()) {
-		return
+	if err != nil {
+		return err
 	}
 
-	applicationName := util.GetApplictionName(resource.GetLabels())
-
-	if len(applicationName) > 0 {
-		key := resource.GetNamespace() + "/" + applicationName
-		v.queue.Add(key)
+	sources := []runtime.Object{
+		&v1.Deployment{},
+		&corev1.Service{},
+		&v1.StatefulSet{},
+		&v1beta12.Ingress{},
+		&servicemeshv1alpha2.ServicePolicy{},
+		&servicemeshv1alpha2.Strategy{},
 	}
+
+	for _, s := range sources {
+		// Watch for changes to Application
+		err = c.Watch(
+			&source.Kind{Type: s},
+			&handler.EnqueueRequestsFromMapFunc{ToRequests: handler.ToRequestsFunc(
+				func(h handler.MapObject) []reconcile.Request {
+					return []reconcile.Request{{NamespacedName: types.NamespacedName{
+						Name:      servicemesh.GetApplictionName(h.Meta.GetLabels()),
+						Namespace: h.Meta.GetNamespace()}}}
+				})},
+			predicate.Funcs{
+				UpdateFunc: func(e event.UpdateEvent) bool {
+					return isApp(e.MetaOld, e.MetaNew)
+				},
+				CreateFunc: func(e event.CreateEvent) bool {
+					return isApp(e.Meta)
+				},
+				DeleteFunc: func(e event.DeleteEvent) bool {
+					return isApp(e.Meta)
+				},
+			})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func (v *ApplicationController) handleErr(err error, key interface{}) {
-	if err == nil {
-		v.queue.Forget(key)
-		return
-	}
+var _ reconcile.Reconciler = &ApplicationReconciler{}
 
-	if v.queue.NumRequeues(key) < maxRetries {
-		log.V(2).Info("Error syncing virtualservice for service retrying.", "key", key, "error", err)
-		v.queue.AddRateLimited(key)
-		return
+func isApp(obs ...metav1.Object) bool {
+	for _, o := range obs {
+		if o.GetLabels() != nil && servicemesh.IsAppComponent(o.GetLabels()) {
+			return true
+		}
 	}
-
-	log.V(4).Info("Dropping service out of the queue.", "key", key, "error", err)
-	v.queue.Forget(key)
-	utilruntime.HandleError(err)
+	return false
 }

@@ -26,6 +26,7 @@ import (
 	"kubesphere.io/kubesphere/pkg/apiserver/runtime"
 	"kubesphere.io/kubesphere/pkg/informers"
 	"net/http"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 )
 
 const (
@@ -44,10 +45,10 @@ func Resource(resource string) schema.GroupResource {
 	return GroupVersion.WithResource(resource).GroupResource()
 }
 
-func AddToContainer(c *restful.Container, informerFactory informers.InformerFactory) error {
+func AddToContainer(c *restful.Container, informerFactory informers.InformerFactory, cache cache.Cache) error {
 
 	webservice := runtime.NewWebService(GroupVersion)
-	handler := New(informerFactory)
+	handler := New(informerFactory, cache)
 
 	webservice.Route(webservice.GET("/{resources}").
 		To(handler.handleListResources).

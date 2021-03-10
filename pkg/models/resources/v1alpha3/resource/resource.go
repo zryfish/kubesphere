@@ -69,6 +69,7 @@ import (
 	"kubesphere.io/kubesphere/pkg/models/resources/v1alpha3/workspacerole"
 	"kubesphere.io/kubesphere/pkg/models/resources/v1alpha3/workspacerolebinding"
 	"kubesphere.io/kubesphere/pkg/models/resources/v1alpha3/workspacetemplate"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 )
 
 var ErrResourceNotSupported = errors.New("resource is not supported")
@@ -77,7 +78,7 @@ type ResourceGetter struct {
 	getters map[schema.GroupVersionResource]v1alpha3.Interface
 }
 
-func NewResourceGetter(factory informers.InformerFactory) *ResourceGetter {
+func NewResourceGetter(factory informers.InformerFactory, cache cache.Cache) *ResourceGetter {
 	getters := make(map[schema.GroupVersionResource]v1alpha3.Interface)
 
 	getters[schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}] = deployment.New(factory.KubernetesSharedInformerFactory())
@@ -89,7 +90,7 @@ func NewResourceGetter(factory informers.InformerFactory) *ResourceGetter {
 	getters[schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}] = pod.New(factory.KubernetesSharedInformerFactory())
 	getters[schema.GroupVersionResource{Group: "", Version: "v1", Resource: "nodes"}] = node.New(factory.KubernetesSharedInformerFactory())
 	getters[schema.GroupVersionResource{Group: "extensions", Version: "v1beta1", Resource: "ingresses"}] = ingress.New(factory.KubernetesSharedInformerFactory())
-	getters[schema.GroupVersionResource{Group: "app.k8s.io", Version: "v1beta1", Resource: "applications"}] = application.New(factory.ApplicationSharedInformerFactory())
+	getters[schema.GroupVersionResource{Group: "app.k8s.io", Version: "v1beta1", Resource: "applications"}] = application.New(cache)
 	getters[schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"}] = networkpolicy.New(factory.KubernetesSharedInformerFactory())
 	getters[schema.GroupVersionResource{Group: "batch", Version: "v1", Resource: "jobs"}] = job.New(factory.KubernetesSharedInformerFactory())
 

@@ -295,7 +295,6 @@ const (
 	Failed = "Failed"
 )
 
-// +genclient
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:categories=all,shortName=app
 // +kubebuilder:subresource:status

@@ -20,8 +20,10 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"k8s.io/client-go/kubernetes/scheme"
 	cliflag "k8s.io/component-base/cli/flag"
 	"k8s.io/klog"
+	"kubesphere.io/kubesphere/pkg/apis"
 	"kubesphere.io/kubesphere/pkg/apiserver"
 	apiserverconfig "kubesphere.io/kubesphere/pkg/apiserver/config"
 	"kubesphere.io/kubesphere/pkg/informers"
@@ -38,6 +40,7 @@ import (
 	fakes3 "kubesphere.io/kubesphere/pkg/simple/client/s3/fake"
 	"kubesphere.io/kubesphere/pkg/simple/client/sonarqube"
 	"net/http"
+	runtimecache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"strings"
 )
 
@@ -104,8 +107,17 @@ func (s *ServerRunOptions) NewAPIServer(stopCh <-chan struct{}) (*apiserver.APIS
 	}
 	apiServer.KubernetesClient = kubernetesClient
 
+	if err = apis.AddToScheme(scheme.Scheme); err != nil {
+		klog.Fatalf("unable to register apis: %v", err)
+	}
+
+	apiServer.RuntimeCache, err = runtimecache.New(kubernetesClient.Config(), runtimecache.Options{Scheme: scheme.Scheme})
+	if err != nil {
+		klog.Fatalf("unable to create runtime cache: %v", err)
+	}
+
 	informerFactory := informers.NewInformerFactories(kubernetesClient.Kubernetes(), kubernetesClient.KubeSphere(),
-		kubernetesClient.Istio(), kubernetesClient.Application(), kubernetesClient.Snapshot(), kubernetesClient.ApiExtensions())
+		kubernetesClient.Istio(), kubernetesClient.Snapshot(), kubernetesClient.ApiExtensions())
 	apiServer.InformerFactory = informerFactory
 
 	if s.MonitoringOptions == nil || len(s.MonitoringOptions.Endpoint) == 0 {

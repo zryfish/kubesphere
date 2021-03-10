@@ -136,9 +136,9 @@ github.com/elastic/go-elasticsearch/v7/estransport
 github.com/elastic/go-elasticsearch/v7/internal/version
 # github.com/emicklei/go-restful v2.11.1+incompatible => github.com/emicklei/go-restful v2.9.5+incompatible
 github.com/emicklei/go-restful
+github.com/emicklei/go-restful/log
 # github.com/emicklei/go-restful-openapi v1.0.0 => github.com/emicklei/go-restful-openapi v1.0.0
 github.com/emicklei/go-restful-openapi
-github.com/emicklei/go-restful/log
 # github.com/emirpasic/gods v1.12.0 => github.com/emirpasic/gods v1.12.0
 github.com/emirpasic/gods/containers
 github.com/emirpasic/gods/lists
@@ -223,7 +223,7 @@ github.com/golang/example/stringutil
 github.com/golang/glog
 # github.com/golang/groupcache v0.0.0-20191027212112-611e8accdfc9 => github.com/golang/groupcache v0.0.0-20190702054246-869f871628b6
 github.com/golang/groupcache/lru
-# github.com/golang/mock v1.2.0 => github.com/golang/mock v1.2.0
+# github.com/golang/mock v1.3.1 => github.com/golang/mock v1.2.0
 github.com/golang/mock/gomock
 # github.com/golang/protobuf v1.3.2 => github.com/golang/protobuf v1.3.2
 github.com/golang/protobuf/descriptor
@@ -354,7 +354,7 @@ github.com/mailru/easyjson/jlexer
 github.com/mailru/easyjson/jwriter
 # github.com/mattn/go-colorable v0.1.2 => github.com/mattn/go-colorable v0.1.2
 github.com/mattn/go-colorable
-# github.com/mattn/go-isatty v0.0.8 => github.com/mattn/go-isatty v0.0.8
+# github.com/mattn/go-isatty v0.0.12 => github.com/mattn/go-isatty v0.0.8
 github.com/mattn/go-isatty
 # github.com/matttproud/golang_protobuf_extensions v1.0.1 => github.com/matttproud/golang_protobuf_extensions v1.0.1
 github.com/matttproud/golang_protobuf_extensions/pbutil
@@ -454,7 +454,7 @@ github.com/opentracing/opentracing-go/log
 github.com/patrickmn/go-cache
 # github.com/pelletier/go-buffruneio v0.2.0 => github.com/pelletier/go-buffruneio v0.2.0
 github.com/pelletier/go-buffruneio
-# github.com/pelletier/go-toml v1.2.0 => github.com/pelletier/go-toml v1.2.0
+# github.com/pelletier/go-toml v1.7.0 => github.com/pelletier/go-toml v1.2.0
 github.com/pelletier/go-toml
 # github.com/pkg/errors v0.9.1 => github.com/pkg/errors v0.8.1
 github.com/pkg/errors
@@ -523,7 +523,7 @@ github.com/spf13/afero
 github.com/spf13/afero/mem
 # github.com/spf13/cast v1.3.0 => github.com/spf13/cast v1.3.0
 github.com/spf13/cast
-# github.com/spf13/cobra v0.0.5 => github.com/spf13/cobra v0.0.5
+# github.com/spf13/cobra v1.0.0 => github.com/spf13/cobra v0.0.5
 github.com/spf13/cobra
 # github.com/spf13/jwalterweatherman v1.0.0 => github.com/spf13/jwalterweatherman v1.0.0
 github.com/spf13/jwalterweatherman
@@ -791,7 +791,7 @@ gopkg.in/tomb.v1
 gopkg.in/warnings.v0
 # gopkg.in/yaml.v2 v2.2.8 => gopkg.in/yaml.v2 v2.2.8
 gopkg.in/yaml.v2
-# gopkg.in/yaml.v3 v3.0.0-20190905181640-827449938966 => gopkg.in/yaml.v3 v3.0.0-20190905181640-827449938966
+# gopkg.in/yaml.v3 v3.0.0-20200121175148-a6ecf24a6d71 => gopkg.in/yaml.v3 v3.0.0-20190905181640-827449938966
 gopkg.in/yaml.v3
 # istio.io/api v0.0.0-20191111210003-35e06ef8d838 => istio.io/api v0.0.0-20191111210003-35e06ef8d838
 istio.io/api/authentication/v1alpha1
@@ -841,7 +841,7 @@ istio.io/client-go/pkg/listers/security/v1beta1
 # istio.io/gogo-genproto v0.0.0-20190930162913-45029607206a => istio.io/gogo-genproto v0.0.0-20190930162913-45029607206a
 istio.io/gogo-genproto/googleapis/google/api
 istio.io/gogo-genproto/googleapis/google/rpc
-# k8s.io/api v0.17.3 => k8s.io/api v0.17.3
+# k8s.io/api v0.18.2 => k8s.io/api v0.17.3
 k8s.io/api/admission/v1
 k8s.io/api/admission/v1beta1
 k8s.io/api/admissionregistration/v1
@@ -884,7 +884,7 @@ k8s.io/api/settings/v1alpha1
 k8s.io/api/storage/v1
 k8s.io/api/storage/v1alpha1
 k8s.io/api/storage/v1beta1
-# k8s.io/apiextensions-apiserver v0.17.3 => k8s.io/apiextensions-apiserver v0.17.3
+# k8s.io/apiextensions-apiserver v0.18.2 => k8s.io/apiextensions-apiserver v0.17.3
 k8s.io/apiextensions-apiserver/pkg/apis/apiextensions
 k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1
 k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1
@@ -902,7 +902,7 @@ k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions/apiextensio
 k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions/internalinterfaces
 k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1
 k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1beta1
-# k8s.io/apimachinery v0.17.3 => k8s.io/apimachinery v0.17.3
+# k8s.io/apimachinery v0.18.2 => k8s.io/apimachinery v0.17.3
 k8s.io/apimachinery/pkg/api/equality
 k8s.io/apimachinery/pkg/api/errors
 k8s.io/apimachinery/pkg/api/meta
@@ -1070,7 +1070,7 @@ k8s.io/apiserver/plugin/pkg/authenticator/token/webhook
 k8s.io/apiserver/plugin/pkg/authorizer/webhook
 # k8s.io/cli-runtime v0.17.3 => k8s.io/cli-runtime v0.17.3
 k8s.io/cli-runtime/pkg/printers
-# k8s.io/client-go v0.17.3 => k8s.io/client-go v0.17.3
+# k8s.io/client-go v0.18.2 => k8s.io/client-go v0.17.3
 k8s.io/client-go/discovery
 k8s.io/client-go/discovery/fake
 k8s.io/client-go/dynamic
@@ -1286,7 +1286,7 @@ k8s.io/client-go/util/jsonpath
 k8s.io/client-go/util/keyutil
 k8s.io/client-go/util/retry
 k8s.io/client-go/util/workqueue
-# k8s.io/code-generator v0.17.3 => k8s.io/code-generator v0.17.3
+# k8s.io/code-generator v0.18.9 => k8s.io/code-generator v0.17.3
 k8s.io/code-generator/cmd/client-gen
 k8s.io/code-generator/cmd/client-gen/args
 k8s.io/code-generator/cmd/client-gen/generators
@@ -1359,20 +1359,10 @@ openpitrix.io/openpitrix/pkg/util/reflectutil
 openpitrix.io/openpitrix/pkg/util/stringutil
 openpitrix.io/openpitrix/pkg/util/yamlutil
 openpitrix.io/openpitrix/pkg/version
-# sigs.k8s.io/application v1.0.0 => kubesphere.io/application v1.0.0
+# sigs.k8s.io/application v0.8.4-0.20201016185654-c8e2959e57a0
+sigs.k8s.io/application/api/v1beta1
 sigs.k8s.io/application/controllers
-sigs.k8s.io/application/pkg/apis/app/v1beta1
-sigs.k8s.io/application/pkg/client/clientset/versioned
-sigs.k8s.io/application/pkg/client/clientset/versioned/fake
-sigs.k8s.io/application/pkg/client/clientset/versioned/scheme
-sigs.k8s.io/application/pkg/client/clientset/versioned/typed/app/v1beta1
-sigs.k8s.io/application/pkg/client/clientset/versioned/typed/app/v1beta1/fake
-sigs.k8s.io/application/pkg/client/informers/externalversions
-sigs.k8s.io/application/pkg/client/informers/externalversions/app
-sigs.k8s.io/application/pkg/client/informers/externalversions/app/v1beta1
-sigs.k8s.io/application/pkg/client/informers/externalversions/internalinterfaces
-sigs.k8s.io/application/pkg/client/listers/app/v1beta1
-# sigs.k8s.io/controller-runtime v0.5.0 => sigs.k8s.io/controller-runtime v0.4.0
+# sigs.k8s.io/controller-runtime v0.6.0 => sigs.k8s.io/controller-runtime v0.4.0
 sigs.k8s.io/controller-runtime
 sigs.k8s.io/controller-runtime/pkg/builder
 sigs.k8s.io/controller-runtime/pkg/cache
@@ -1411,7 +1401,7 @@ sigs.k8s.io/controller-runtime/pkg/webhook/admission
 sigs.k8s.io/controller-runtime/pkg/webhook/conversion
 sigs.k8s.io/controller-runtime/pkg/webhook/internal/certwatcher
 sigs.k8s.io/controller-runtime/pkg/webhook/internal/metrics
-# sigs.k8s.io/controller-tools v0.2.4 => sigs.k8s.io/controller-tools v0.2.4
+# sigs.k8s.io/controller-tools v0.4.0 => sigs.k8s.io/controller-tools v0.2.4
 sigs.k8s.io/controller-tools/cmd/controller-gen
 sigs.k8s.io/controller-tools/pkg/crd
 sigs.k8s.io/controller-tools/pkg/crd/markers
@@ -1448,5 +1438,5 @@ sigs.k8s.io/structured-merge-diff/value
 sigs.k8s.io/testing_frameworks/integration
 sigs.k8s.io/testing_frameworks/integration/addr
 sigs.k8s.io/testing_frameworks/integration/internal
-# sigs.k8s.io/yaml v1.1.0 => sigs.k8s.io/yaml v1.1.0
+# sigs.k8s.io/yaml v1.2.0 => sigs.k8s.io/yaml v1.1.0
 sigs.k8s.io/yaml

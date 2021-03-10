@@ -79,6 +79,7 @@ import (
 	utilnet "kubesphere.io/kubesphere/pkg/utils/net"
 	"net/http"
 	rt "runtime"
+	runtimecache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"time"
 )
 
@@ -136,6 +137,8 @@ type APIServer struct {
 	EventsClient events.Client
 
 	AuditingClient auditing.Client
+
+	RuntimeCache runtimecache.Cache
 }
 
 func (s *APIServer) PrepareRun(stopCh <-chan struct{}) error {
@@ -165,7 +168,7 @@ func (s *APIServer) PrepareRun(stopCh <-chan struct{}) error {
 //   any attempt to list objects using listers will get empty results.
 func (s *APIServer) installKubeSphereAPIs() {
 	urlruntime.Must(configv1alpha2.AddToContainer(s.container, s.Config))
-	urlruntime.Must(resourcev1alpha3.AddToContainer(s.container, s.InformerFactory))
+	urlruntime.Must(resourcev1alpha3.AddToContainer(s.container, s.InformerFactory, s.RuntimeCache))
 	urlruntime.Must(monitoringv1alpha3.AddToContainer(s.container, s.KubernetesClient.Kubernetes(), s.MonitoringClient, s.InformerFactory, s.OpenpitrixClient))
 	urlruntime.Must(openpitrixv1.AddToContainer(s.container, s.InformerFactory, s.OpenpitrixClient))
 	urlruntime.Must(operationsv1alpha2.AddToContainer(s.container, s.KubernetesClient.Kubernetes()))
@@ -441,26 +444,6 @@ func (s *APIServer) waitForResourceSync(stopCh <-chan struct{}) error {
 
 	ksInformerFactory.Start(stopCh)
 	ksInformerFactory.WaitForCacheSync(stopCh)
-
-	appInformerFactory := s.InformerFactory.ApplicationSharedInformerFactory()
-
-	appGVRs := []schema.GroupVersionResource{
-		{Group: "app.k8s.io", Version: "v1beta1", Resource: "applications"},
-	}
-
-	for _, gvr := range appGVRs {
-		if !isResourceExists(gvr) {
-			klog.Warningf("resource %s not exists in the cluster", gvr)
-		} else {
-			_, err = appInformerFactory.ForResource(gvr)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	appInformerFactory.Start(stopCh)
-	appInformerFactory.WaitForCacheSync(stopCh)
 
 	snapshotInformerFactory := s.InformerFactory.SnapshotSharedInformerFactory()
 	snapshotGVRs := []schema.GroupVersionResource{
